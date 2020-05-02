@@ -6,7 +6,6 @@ Description: SASKV5N Aurora
 # Create the Aurora MySQL or PostgreSQL database(s). Currently, this template only supports alarms for Aurora MySQL.
 
 Parameters:
-
   NetworkStackName:
     Description: Name of an active CloudFormation stack that contains networking resources
     Type: String
@@ -81,6 +80,7 @@ Parameters:
     Default: dev
     AllowedValues:
       - dev
+      - staging
       - prod
     ConstraintDescription: Specify either dev or prod
 
@@ -144,24 +144,20 @@ Parameters:
       - true
       - false
 
-
 Conditions:
+  IsProd: !Equals [!Ref EnvironmentName, prod]
 
-  IsProd: !Equals [ !Ref EnvironmentName, prod ]
-
-  IsAuroraMySQL: !Equals [ !Ref DatabaseEngine, aurora ]
+  IsAuroraMySQL: !Equals [!Ref DatabaseEngine, aurora]
 
   AlarmsEnabled: !And
     - !Condition IsAuroraMySQL
-    - !Equals [ !Ref EnableAlarms, true ]
+    - !Equals [!Ref EnableAlarms, true]
 
   EnhancedMonitoringSupprtedAndEnabled: !And
     - !Condition AlarmsEnabled
-    - !Equals [ !Ref EnhancedMonitoring, true ]
-
+    - !Equals [!Ref EnhancedMonitoring, true]
 
 Resources:
-
   EnhancedMonitoringRole:
     Type: AWS::IAM::Role
     Condition: EnhancedMonitoringSupprtedAndEnabled
@@ -188,11 +184,11 @@ Resources:
     Properties:
       DBSubnetGroupDescription: Database subnet group
       SubnetIds:
-      - Fn::ImportValue: !Sub ${NetworkStackName}-PrivateSubnet1ID
-      - Fn::ImportValue: !Sub ${NetworkStackName}-PrivateSubnet2ID
+        - Fn::ImportValue: !Sub ${NetworkStackName}-PrivateSubnet1ID
+        - Fn::ImportValue: !Sub ${NetworkStackName}-PrivateSubnet2ID
       Tags:
-      - Key: Name
-        Value: !Ref AWS::StackName
+        - Key: Name
+          Value: !Ref AWS::StackName
 
   AuroraCluster:
     Type: AWS::RDS::DBCluster
@@ -203,8 +199,9 @@ Resources:
       DBSubnetGroupName: !Ref DatabaseSubnetGroup
       StorageEncrypted: !Ref EncryptionAtRest
       DatabaseName: !Ref DatabaseName
-      DBClusterParameterGroupName: !If [ IsAuroraMySQL,  default.aurora5.6, default.aurora-postgresql9.6 ]
-      Port: !If [ IsAuroraMySQL,  3306, 5432 ]
+      DBClusterParameterGroupName:
+        !If [IsAuroraMySQL, default.aurora5.6, default.aurora-postgresql9.6]
+      Port: !If [IsAuroraMySQL, 3306, 5432]
       VpcSecurityGroupIds:
         - Fn::ImportValue: !Sub ${NetworkStackName}-DatabaseGroupID
     DependsOn: DatabaseSubnetGroup
@@ -217,13 +214,19 @@ Resources:
       DBInstanceClass: !Ref DatabaseInstanceClass
       DBSubnetGroupName: !Ref DatabaseSubnetGroup
       StorageEncrypted: !Ref EncryptionAtRest
-      DBParameterGroupName: !If [ IsAuroraMySQL,  default.aurora5.6, default.aurora-postgresql9.6 ]
-      MonitoringInterval: !If [ EnhancedMonitoringSupprtedAndEnabled, 60, 0 ]
-      MonitoringRoleArn: !If [ EnhancedMonitoringSupprtedAndEnabled, !GetAtt EnhancedMonitoringRole.Arn, !Ref "AWS::NoValue" ]
+      DBParameterGroupName:
+        !If [IsAuroraMySQL, default.aurora5.6, default.aurora-postgresql9.6]
+      MonitoringInterval: !If [EnhancedMonitoringSupprtedAndEnabled, 60, 0]
+      MonitoringRoleArn:
+        !If [
+          EnhancedMonitoringSupprtedAndEnabled,
+          !GetAtt EnhancedMonitoringRole.Arn,
+          !Ref "AWS::NoValue",
+        ]
       CopyTagsToSnapshot: true
       Tags:
-      - Key: Name
-        Value: !Ref AWS::StackName
+        - Key: Name
+          Value: !Ref AWS::StackName
     DependsOn: AuroraCluster
 
   AuroraInstance1:
@@ -235,13 +238,19 @@ Resources:
       DBInstanceClass: !Ref DatabaseInstanceClass
       DBSubnetGroupName: !Ref DatabaseSubnetGroup
       StorageEncrypted: !Ref EncryptionAtRest
-      DBParameterGroupName: !If [ IsAuroraMySQL,  default.aurora5.6, default.aurora-postgresql9.6 ]
-      MonitoringInterval: !If [ EnhancedMonitoringSupprtedAndEnabled, 60, 0 ]
-      MonitoringRoleArn: !If [ EnhancedMonitoringSupprtedAndEnabled, !GetAtt EnhancedMonitoringRole.Arn, !Ref "AWS::NoValue" ]
+      DBParameterGroupName:
+        !If [IsAuroraMySQL, default.aurora5.6, default.aurora-postgresql9.6]
+      MonitoringInterval: !If [EnhancedMonitoringSupprtedAndEnabled, 60, 0]
+      MonitoringRoleArn:
+        !If [
+          EnhancedMonitoringSupprtedAndEnabled,
+          !GetAtt EnhancedMonitoringRole.Arn,
+          !Ref "AWS::NoValue",
+        ]
       CopyTagsToSnapshot: true
       Tags:
-      - Key: Name
-        Value: !Ref AWS::StackName
+        - Key: Name
+          Value: !Ref AWS::StackName
     DependsOn: AuroraCluster
 
   DatabaseCpuAlarm:
@@ -359,9 +368,7 @@ Resources:
         - !Ref DatabaseAlarmTopic
     DependsOn: AuroraCluster
 
-
 Outputs:
-
   Name:
     Description: Aurora Stack Name
     Value: !Ref AWS::StackName
@@ -405,4 +412,3 @@ Outputs:
     Value: !GetAtt DatabaseAlarmTopic.TopicName
     Export:
       Name: !Sub ${AWS::StackName}-DatabaseAlarmTopicName
-

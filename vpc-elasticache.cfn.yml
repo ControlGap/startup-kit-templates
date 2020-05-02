@@ -9,7 +9,7 @@ Parameters:
 
   TemplateBucket:
     Type: String
-    Default: awslabs-startup-kit-templates-deploy-v5
+    Default: cgd-cloudformation-templates
     Description: The template bucket for the CloudFormation templates
 
   # vpc.cfn.yml parameters
@@ -103,6 +103,7 @@ Parameters:
     Default: dev
     AllowedValues:
       - dev
+      - staging
       - prod
     ConstraintDescription: Specify either dev or prod
 

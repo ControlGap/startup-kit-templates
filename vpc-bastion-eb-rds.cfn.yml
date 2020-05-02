@@ -1,15 +1,12 @@
 ---
 AWSTemplateFormatVersion: 2010-09-09
 
-
 Description: SASKV5 VPC + Bastion + Elastic Beanstalk + Database
 
-
 Parameters:
-
   TemplateBucket:
     Type: String
-    Default: awslabs-startup-kit-templates-deploy-v5
+    Default: cgd-cloudformation-templates
     Description: The template bucket for the CloudFormation templates
 
   EnvironmentName:
@@ -432,15 +429,17 @@ Metadata:
         default: Enable Alarms
 
 Conditions:
+  IsProd: !Equals [!Ref EnvironmentName, prod]
 
-   IsProd: !Equals [ !Ref EnvironmentName, prod ]
+  IsAurora:
+    !Or [
+      !Equals [!Ref DatabaseEngine, aurora],
+      !Equals [!Ref DatabaseEngine, aurora-postgresql],
+    ]
 
-   IsAurora: !Or [ !Equals [ !Ref DatabaseEngine, aurora ], !Equals [ !Ref DatabaseEngine, aurora-postgresql ] ]
-
-   IsNotAurora: !Not [ Condition: IsAurora ]
+  IsNotAurora: !Not [Condition: IsAurora]
 
 Resources:
-
   VpcStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -451,7 +450,7 @@ Resources:
         SSHFrom: !Ref SSHFrom
         ELBIngressPort: !Ref ELBIngressPort
         AppIngressPort: !Ref AppIngressPort
-        SingleNatGateway: !If [ IsProd, false, true ]
+        SingleNatGateway: !If [IsProd, false, true]
 
   BastionStack:
     Type: AWS::CloudFormation::Stack
@@ -522,7 +521,12 @@ Resources:
         StackType: !Ref StackType
         EnvironmentName: !Ref EnvironmentName
         NetworkStackName: !GetAtt VpcStack.Outputs.Name
-        DatabaseStackName: !If [ IsAurora, !GetAtt AuroraStack.Outputs.Name, !GetAtt RdsStack.Outputs.Name ]
+        DatabaseStackName:
+          !If [
+            IsAurora,
+            !GetAtt AuroraStack.Outputs.Name,
+            !GetAtt RdsStack.Outputs.Name,
+          ]
         DatabaseName: !Ref DatabaseName
         DatabasePassword: !Ref DatabasePassword
         AppS3Bucket: !Ref AppS3Bucket
@@ -534,9 +538,7 @@ Resources:
         AutoScalingMinInstanceCount: !Ref AutoScalingMinInstanceCount
         AutoScalingMaxInstanceCount: !Ref AutoScalingMaxInstanceCount
 
-
 Outputs:
-
   Name:
     Description: Aurora Stack Name
     Value: !Ref AWS::StackName
@@ -569,4 +571,3 @@ Outputs:
     Condition: IsNotAurora
     Export:
       Name: !Sub ${AWS::StackName}-DatabaseStackName
-

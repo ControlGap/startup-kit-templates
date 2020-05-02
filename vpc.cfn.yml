@@ -3,12 +3,10 @@ AWSTemplateFormatVersion: 2010-09-09
 
 Description: SASKV5 VPC
 
-
 Parameters:
-
   TemplateBucket:
     Type: String
-    Default: awslabs-startup-kit-templates-deploy-v5
+    Default: cgd-cloudformation-templates
     Description: The template bucket for the CloudFormation templates
 
   AvailabilityZone1:
@@ -50,6 +48,7 @@ Parameters:
     Default: dev
     AllowedValues:
       - dev
+      - staging
       - prod
     ConstraintDescription: Specify either dev or prod
 
@@ -86,14 +85,10 @@ Metadata:
       EnvironmentName:
         default: Environment
 
-
 Conditions:
-
-   IsProd: !Equals [ !Ref EnvironmentName, prod ]
-
+  IsProd: !Equals [!Ref EnvironmentName, prod]
 
 Resources:
-
   VpcStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -104,14 +99,10 @@ Resources:
         SSHFrom: !Ref SSHFrom
         ELBIngressPort: !Ref ELBIngressPort
         AppIngressPort: !Ref AppIngressPort
-        SingleNatGateway: !If [ IsProd, false, true ]
-
+        SingleNatGateway: !If [IsProd, false, true]
 
 Outputs:
-
   VpcStackName:
     Value: !GetAtt VpcStack.Outputs.Name
     Export:
       Name: !Sub ${AWS::StackName}-VpcStackName
-
-

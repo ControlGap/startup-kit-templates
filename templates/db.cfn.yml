@@ -5,7 +5,6 @@ Description: SASKV5N RDS
 
 # Database stack creation prerequisite:  First create a VPC stack - see README for more info
 Parameters:
-
   NetworkStackName:
     Description: Name of an active CloudFormation stack that contains networking resources
     Type: String
@@ -70,8 +69,6 @@ Parameters:
     ConstraintDescription: Choose an engine from the drop down
     AllowedValues:
       - postgres
-      - mariadb
-      - mysql
 
   EncryptionAtRest:
     Default: false
@@ -108,13 +105,14 @@ Parameters:
       - db.r4.16xlarge
 
   EnvironmentName:
-    Description: Environment name, either dev or prod
+    Description: Environment name, either dev, staging or prod
     Type: String
     Default: dev
     AllowedValues:
       - dev
+      - staging
       - prod
-    ConstraintDescription: Specify either dev or prod
+    ConstraintDescription: Specify either dev, staging or prod
 
   DatabaseAlarmMaxCpuPercent:
     Description: Database CPU % max for alarm
@@ -167,21 +165,17 @@ Parameters:
       - true
       - false
 
-
 Conditions:
+  IsProd: !Equals [!Ref EnvironmentName, prod]
 
-  IsProd: !Equals [ !Ref EnvironmentName, prod ]
-
-  AlarmsEnabled: !Equals [ !Ref EnableAlarms, true ]
+  AlarmsEnabled: !Equals [!Ref EnableAlarms, true]
 
   EnhancedMonitoringSupprtedAndEnabled: !And
     - !Condition AlarmsEnabled
-    - !Equals [ !Ref EnhancedMonitoring, true ]
-    - !Not [ !Equals [ !Ref DatabaseInstanceClass, "db.m1.small" ] ]
-
+    - !Equals [!Ref EnhancedMonitoring, true]
+    - !Not [!Equals [!Ref DatabaseInstanceClass, "db.m1.small"]]
 
 Resources:
-
   EnhancedMonitoringRole:
     Type: AWS::IAM::Role
     Condition: EnhancedMonitoringSupprtedAndEnabled
@@ -208,11 +202,11 @@ Resources:
     Properties:
       DBSubnetGroupDescription: Database subnet group
       SubnetIds:
-      - Fn::ImportValue: !Sub ${NetworkStackName}-PrivateSubnet1ID
-      - Fn::ImportValue: !Sub ${NetworkStackName}-PrivateSubnet2ID
+        - Fn::ImportValue: !Sub ${NetworkStackName}-PrivateSubnet1ID
+        - Fn::ImportValue: !Sub ${NetworkStackName}-PrivateSubnet2ID
       Tags:
-      - Key: Name
-        Value: !Ref AWS::StackName
+        - Key: Name
+          Value: !Ref AWS::StackName
 
   Database:
     Type: AWS::RDS::DBInstance
@@ -227,14 +221,19 @@ Resources:
       DBInstanceClass: !Ref DatabaseInstanceClass
       AllocatedStorage: !Ref DatabaseSize
       StorageType: gp2
-      MultiAZ: !If [ IsProd, true, false ]
+      MultiAZ: !If [IsProd, true, false]
       StorageEncrypted: !Ref EncryptionAtRest
-      MonitoringInterval: !If [ EnhancedMonitoringSupprtedAndEnabled, 60, 0 ]
-      MonitoringRoleArn: !If [ EnhancedMonitoringSupprtedAndEnabled, !GetAtt EnhancedMonitoringRole.Arn, !Ref "AWS::NoValue" ]
+      MonitoringInterval: !If [EnhancedMonitoringSupprtedAndEnabled, 60, 0]
+      MonitoringRoleArn:
+        !If [
+          EnhancedMonitoringSupprtedAndEnabled,
+          !GetAtt EnhancedMonitoringRole.Arn,
+          !Ref "AWS::NoValue",
+        ]
       CopyTagsToSnapshot: true
       Tags:
-      - Key: Name
-        Value: !Ref AWS::StackName
+        - Key: Name
+          Value: !Ref AWS::StackName
     DependsOn: DatabaseSubnetGroup
 
   DatabaseCpuAlarm:
@@ -342,9 +341,7 @@ Resources:
         - !Ref DatabaseAlarmTopic
     DependsOn: Database
 
-
 Outputs:
-
   Name:
     Description: RDS Stack Name
     Value: !Ref AWS::StackName
@@ -388,4 +385,3 @@ Outputs:
     Value: !GetAtt DatabaseAlarmTopic.TopicName
     Export:
       Name: !Sub ${AWS::StackName}-DatabaseAlarmTopicName
-

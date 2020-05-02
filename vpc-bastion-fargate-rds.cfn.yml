@@ -1,16 +1,21 @@
 ---
 AWSTemplateFormatVersion: 2010-09-09
 
-
 Description: SASKV5 VPC + Bastion + Fargate + Database
 
-
 Parameters:
-
   TemplateBucket:
     Type: String
-    Default: awslabs-startup-kit-templates-deploy-v5
+    Default: cgd-cloudformation-templates
     Description: The template bucket for the CloudFormation templates
+
+  ContainerName:
+    Type: String
+    Description: Default container name
+    Default: dsw
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: "^[a-zA-Z][-a-zA-Z0-9]*$"
 
   # vpc.cfn.yml parameters
   AvailabilityZone1:
@@ -135,28 +140,6 @@ Parameters:
     MaxLength: 255
     ConstraintDescription: Value must be between 1 and 255 characters
 
-  GitSourceRepo:
-    Type: String
-    Description: CodeCommit or GitHub source repository - must contain a Dockerfile in the base
-
-  GitBranch:
-    Type: String
-    Default: master
-    Description: CodeCommit or GitHub git repository branch - change triggers a new build
-
-  GitHubToken:
-    Type: String
-    NoEcho: true
-    Description: "GitHub API token - leave blank if using CodeCommit - see: https://github.com/blog/1509-personal-api-tokens"
-
-  GitHubUser:
-    Type: String
-    Description: GitHub username or organization - leave blank if using CodeCommit
-
-  CodeBuildDockerImage:
-    Type: String
-    Default: aws/codebuild/docker:17.09.0
-
   SeedDockerImage:
     Type: String
     Default: registry.hub.docker.com/library/nginx:1.13
@@ -242,8 +225,9 @@ Parameters:
     Default: dev
     AllowedValues:
       - dev
+      - staging
       - prod
-    ConstraintDescription: Specify either dev or prod
+    ConstraintDescription: Specify either dev, staging or prod
 
   # aurora.cfn.yml and/or db.cfn.yml parameters
   DatabaseUser:
@@ -274,19 +258,16 @@ Parameters:
     ConstraintDescription: Name must begin with a letter and contain only alphanumeric characters
 
   DatabaseEngine:
-    Default: aurora
+    Default: postgres
     Type: String
-    Description: Database engines - Aurora MySQL, Aurora PostgreSQL, PostgreSQL, MariaDB and MySQL
+    Description: Database engines - Aurora PostgreSQL, PostgreSQL
     ConstraintDescription: Choose an engine from the drop down
     AllowedValues:
-      - aurora
       - aurora-postgresql
       - postgres
-      - mariadb
-      - mysql
 
   EncryptionAtRest:
-    Default: false
+    Default: true
     Type: String
     Description: The optional flag for encryption at rest (db.t2.small and above)
     ConstraintDescription: Only true or false are allowed
@@ -397,7 +378,6 @@ Parameters:
     MinValue: 1
     ConstraintDescription: A value of one byte or more
 
-
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -465,15 +445,6 @@ Metadata:
           - LoadBalancerAlarmEvaluationPeriodSeconds
           - LoadBalancerAlarmEvaluationPeriods
       - Label:
-          default: Initial Service CI/CD
-        Parameters:
-          - CodeBuildDockerImage
-          - SeedDockerImage
-          - GitSourceRepo
-          - GitBranch
-          - GitHubUser
-          - GitHubToken
-      - Label:
           default: Elastic Container Registry
         Parameters:
           - MaxTaggedContainerImagesToRetain
@@ -505,14 +476,6 @@ Metadata:
         default: Tagged Images Max
       DaysToRetainUntaggedContainerImages:
         default: Untagged Images
-      GitSourceRepo:
-        default: Git Repo
-      GitBranch:
-        default: Git Branch
-      GitHubUser:
-        default: GitHub User
-      GitHubToken:
-        default: GitHub Token
       HealthCheckPath:
         default: Health Check Path
       DefaultContainerCpu:
@@ -583,15 +546,17 @@ Metadata:
         default: LB Latency Threshold
 
 Conditions:
+  IsProd: !Equals [!Ref EnvironmentName, prod]
 
-   IsProd: !Equals [ !Ref EnvironmentName, prod ]
+  IsAurora:
+    !Or [
+      !Equals [!Ref DatabaseEngine, aurora],
+      !Equals [!Ref DatabaseEngine, aurora-postgresql],
+    ]
 
-   IsAurora: !Or [ !Equals [ !Ref DatabaseEngine, aurora ], !Equals [ !Ref DatabaseEngine, aurora-postgresql ] ]
-
-   IsNotAurora: !Not [ Condition: IsAurora ]
+  IsNotAurora: !Not [Condition: IsAurora]
 
 Resources:
-
   VpcStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -602,7 +567,7 @@ Resources:
         SSHFrom: !Ref SSHFrom
         ELBIngressPort: !Ref ELBIngressPort
         AppIngressPort: !Ref AppIngressPort
-        SingleNatGateway: !If [ IsProd, false, true ]
+        SingleNatGateway: !If [IsProd, false, true]
 
   BastionStack:
     Type: AWS::CloudFormation::Stack
@@ -670,17 +635,18 @@ Resources:
       TemplateURL: !Sub https://s3.amazonaws.com/${TemplateBucket}/templates/fargate.cfn.yml
       Parameters:
         NetworkStackName: !GetAtt VpcStack.Outputs.Name
-        DatabaseStackName:  !If [ IsAurora, !GetAtt AuroraStack.Outputs.Name, !GetAtt RdsStack.Outputs.Name ]
+        DatabaseStackName:
+          !If [
+            IsAurora,
+            !GetAtt AuroraStack.Outputs.Name,
+            !GetAtt RdsStack.Outputs.Name,
+          ]
         HostedZoneName: !Ref HostedZoneName
         LoadBalancerDomainName: !Ref LoadBalancerDomainName
         AppProtocol: !Ref AppProtocol
         SSLCertificateArn: !Ref SSLCertificateArn
         HealthCheckPath: !Ref HealthCheckPath
-        GitSourceRepo: !Ref GitSourceRepo
-        GitBranch: !Ref GitBranch
-        GitHubToken: !Ref GitHubToken
-        GitHubUser: !Ref GitHubUser
-        CodeBuildDockerImage: !Ref CodeBuildDockerImage
+        ContainerName: !Ref ContainerName
         SeedDockerImage: !Ref SeedDockerImage
         DefaultContainerCpu: !Ref DefaultContainerCpu
         DefaultContainerMemory: !Ref DefaultContainerMemory
@@ -699,7 +665,6 @@ Resources:
         LoadBalancerAlarmEvaluationPeriods: !Ref LoadBalancerAlarmEvaluationPeriods
 
 Outputs:
-
   VpcStackName:
     Value: !GetAtt VpcStack.Outputs.Name
     Export:
@@ -726,4 +691,3 @@ Outputs:
     Condition: IsNotAurora
     Export:
       Name: !Sub ${AWS::StackName}-DatabaseStackName
-

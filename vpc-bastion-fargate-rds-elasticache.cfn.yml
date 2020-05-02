@@ -1,15 +1,12 @@
 ---
 AWSTemplateFormatVersion: 2010-09-09
 
-
 Description: SASKV5 VPC + Bastion + Fargate + Database + ElastiCache
 
-
 Parameters:
-
   TemplateBucket:
     Type: String
-    Default: awslabs-startup-kit-templates-deploy-v5
+    Default: cgd-cloudformation-templates
     Description: The template bucket for the CloudFormation templates
 
   # vpc.cfn.yml parameters
@@ -50,7 +47,7 @@ Parameters:
   KeyName:
     Description: EC2 key pair name for bastion host SSH access
     Type: AWS::EC2::KeyPair::KeyName
-    AllowedPattern : ".+"
+    AllowedPattern: ".+"
 
   LogRetentionInDays:
     Description: Number of days you would like your CloudWatch Logs to be retained
@@ -441,7 +438,7 @@ Parameters:
     MaxValue: 15
     ConstraintDescription: Node count must be between 1 and 15
     Default: 1
-    
+
   AutoMinorVersionUpgrade:
     Description: Whether or not minor version upgrades to the cache engine should be applied automatically during the maintenance window.
     Type: String
@@ -643,15 +640,17 @@ Metadata:
         default: LB Latency Threshold
 
 Conditions:
+  IsProd: !Equals [!Ref EnvironmentName, prod]
 
-   IsProd: !Equals [ !Ref EnvironmentName, prod ]
+  IsAurora:
+    !Or [
+      !Equals [!Ref DatabaseEngine, aurora],
+      !Equals [!Ref DatabaseEngine, aurora-postgresql],
+    ]
 
-   IsAurora: !Or [ !Equals [ !Ref DatabaseEngine, aurora ], !Equals [ !Ref DatabaseEngine, aurora-postgresql ] ]
-
-   IsNotAurora: !Not [ Condition: IsAurora ]
+  IsNotAurora: !Not [Condition: IsAurora]
 
 Resources:
-
   VpcStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -662,7 +661,7 @@ Resources:
         SSHFrom: !Ref SSHFrom
         ELBIngressPort: !Ref ELBIngressPort
         AppIngressPort: !Ref AppIngressPort
-        SingleNatGateway: !If [ IsProd, false, true ]
+        SingleNatGateway: !If [IsProd, false, true]
 
   BastionStack:
     Type: AWS::CloudFormation::Stack
@@ -730,7 +729,12 @@ Resources:
       TemplateURL: !Sub https://s3.amazonaws.com/${TemplateBucket}/templates/fargate.cfn.yml
       Parameters:
         NetworkStackName: !GetAtt VpcStack.Outputs.Name
-        DatabaseStackName:  !If [ IsAurora, !GetAtt AuroraStack.Outputs.Name, !GetAtt RdsStack.Outputs.Name ]
+        DatabaseStackName:
+          !If [
+            IsAurora,
+            !GetAtt AuroraStack.Outputs.Name,
+            !GetAtt RdsStack.Outputs.Name,
+          ]
         HostedZoneName: !Ref HostedZoneName
         LoadBalancerDomainName: !Ref LoadBalancerDomainName
         AppProtocol: !Ref AppProtocol
@@ -766,13 +770,12 @@ Resources:
         NetworkStackName: !GetAtt VpcStack.Outputs.Name
         ClusterName: !Ref ClusterName
         CacheNodeType: !Ref CacheNodeType
-        CacheEngine:  !Ref CacheEngine
-        CacheNodeCount:  !Ref CacheNodeCount
-        AutoMinorVersionUpgrade:  !Ref AutoMinorVersionUpgrade
+        CacheEngine: !Ref CacheEngine
+        CacheNodeCount: !Ref CacheNodeCount
+        AutoMinorVersionUpgrade: !Ref AutoMinorVersionUpgrade
     DependsOn: VpcStack
 
 Outputs:
-
   VpcStackName:
     Value: !GetAtt VpcStack.Outputs.Name
     Export:

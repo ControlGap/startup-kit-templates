@@ -1,12 +1,9 @@
 ---
 AWSTemplateFormatVersion: 2010-09-09
 
-
 Description: SASKV5 VPC + Bastion + Fargate
 
-
 Parameters:
-
   TemplateBucket:
     Type: String
     Default: awslabs-startup-kit-templates-deploy-v5
@@ -105,28 +102,6 @@ Parameters:
     MaxLength: 255
     ConstraintDescription: Value must be between 1 and 255 characters
 
-  GitSourceRepo:
-    Type: String
-    Description: CodeCommit or GitHub source repository - must contain a Dockerfile in the base
-
-  GitBranch:
-    Type: String
-    Default: master
-    Description: CodeCommit or GitHub git repository branch - change triggers a new build
-
-  GitHubToken:
-    Type: String
-    NoEcho: true
-    Description: "GitHub API token - leave blank if using CodeCommit - see: https://github.com/blog/1509-personal-api-tokens"
-
-  GitHubUser:
-    Type: String
-    Description: GitHub username or organization - leave blank if using CodeCommit
-
-  CodeBuildDockerImage:
-    Type: String
-    Default: aws/codebuild/docker:17.09.0
-
   SeedDockerImage:
     Type: String
     Default: registry.hub.docker.com/library/nginx:1.13
@@ -212,6 +187,7 @@ Parameters:
     Default: dev
     AllowedValues:
       - dev
+      - staging
       - prod
     ConstraintDescription: Specify either dev or prod
 
@@ -293,15 +269,6 @@ Metadata:
           - LoadBalancerAlarmEvaluationPeriodSeconds
           - LoadBalancerAlarmEvaluationPeriods
       - Label:
-          default: Initial Service CI/CD
-        Parameters:
-          - CodeBuildDockerImage
-          - SeedDockerImage
-          - GitSourceRepo
-          - GitBranch
-          - GitHubUser
-          - GitHubToken
-      - Label:
           default: Elastic Container Registry
         Parameters:
           - MaxTaggedContainerImagesToRetain
@@ -333,14 +300,6 @@ Metadata:
         default: Tagged Images Max
       DaysToRetainUntaggedContainerImages:
         default: Untagged Images
-      GitSourceRepo:
-        default: Git Repo
-      GitBranch:
-        default: Git Branch
-      GitHubUser:
-        default: GitHub User
-      GitHubToken:
-        default: GitHub Token
       HealthCheckPath:
         default: Health Check Path
       DefaultContainerCpu:
@@ -367,8 +326,6 @@ Metadata:
         default: SSL Certificate
       SeedDockerImage:
         default: Initial Image
-      CodeBuildDockerImage:
-        default: CodeBuild Image
       EnableLBAlarm:
         default: Enable LB Alarm
       LoadBalancerAlarmEvaluationPeriods:
@@ -378,15 +335,10 @@ Metadata:
       LoadBalancerLatencySeconds:
         default: LB Latency Threshold
 
-
-
 Conditions:
-
-   IsProd: !Equals [ !Ref EnvironmentName, prod ]
-
+  IsProd: !Equals [!Ref EnvironmentName, prod]
 
 Resources:
-
   VpcStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -397,7 +349,7 @@ Resources:
         SSHFrom: !Ref SSHFrom
         ELBIngressPort: !Ref ELBIngressPort
         AppIngressPort: !Ref AppIngressPort
-        SingleNatGateway: !If [ IsProd, false, true ]
+        SingleNatGateway: !If [IsProd, false, true]
 
   BastionStack:
     Type: AWS::CloudFormation::Stack
@@ -421,11 +373,6 @@ Resources:
         AppProtocol: !Ref AppProtocol
         SSLCertificateArn: !Ref SSLCertificateArn
         HealthCheckPath: !Ref HealthCheckPath
-        GitSourceRepo: !Ref GitSourceRepo
-        GitBranch: !Ref GitBranch
-        GitHubToken: !Ref GitHubToken
-        GitHubUser: !Ref GitHubUser
-        CodeBuildDockerImage: !Ref CodeBuildDockerImage
         SeedDockerImage: !Ref SeedDockerImage
         DefaultContainerCpu: !Ref DefaultContainerCpu
         DefaultContainerMemory: !Ref DefaultContainerMemory
@@ -444,9 +391,7 @@ Resources:
         LoadBalancerAlarmEvaluationPeriods: !Ref LoadBalancerAlarmEvaluationPeriods
     DependsOn: VpcStack
 
-
 Outputs:
-
   VpcStackName:
     Value: !GetAtt VpcStack.Outputs.Name
     Export:
@@ -461,4 +406,3 @@ Outputs:
     Value: !GetAtt FargateStack.Outputs.Name
     Export:
       Name: !Sub ${AWS::StackName}-FargateStackName
-
